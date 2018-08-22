@@ -13,8 +13,6 @@ Role Variables
 
 None
 
-**Alternatively you can assign at group_vars.**
-
 Dependencies
 ------------
 
