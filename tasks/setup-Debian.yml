@@ -1,0 +1,67 @@
+---
+
+# Implements the Ubuntu portion of Step 1 of http://kubernetes.io/docs/getting-started-guides/kubeadm/
+
+# curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+# cat <<EOF > /etc/apt/sources.list.d/kubernetes.list
+# deb http://apt.kubernetes.io/ kubernetes-xenial main
+# EOF
+# apt-get update
+# apt-get install -y docker.io kubelet kubeadm kubectl kubernetes-cni
+- name: Disable swap in linux
+  command: swapoff -a
+
+- name: Identify configured swap devices and files.
+  command: cat /proc/swaps
+  register: command_result
+
+- name: Ansible shell register result
+  debug: msg="{{ command_result.stdout }}"
+
+- name: Disable swap after reboot
+  command: sed -i '/ swap / s/^/#/' /etc/fstab
+
+- name: Ansible shell register result
+  debug: msg="{{ command_result.stdout }}"
+
+- name: Backup /etc/sysctl.conf
+  command: cp /etc/sysctl.conf /etc/sysctl.conf.bak
+
+- name: "K8S Network Plugin Requirements"
+  copy:
+    src: "{{ role_path }}/files/k8s.conf"
+    dest: /etc/sysctl.d/sysctl.conf
+
+- name: Backup etc/ufw/sysctl.conf
+  command: cp /etc/ufw/sysctl.conf /etc/ufw/sysctl.conf.bak
+
+- name: Edit /etc/ufw/sysctl.conf and append this lines to the end
+  shell: |
+    echo 'net/bridge/bridge-nf-call-ip6tables = 0
+    net/bridge/bridge-nf-call-iptables = 0
+    net/bridge/bridge-nf-call-arptables = 0' >> /etc/ufw/sysctl.conf
+
+- name: Install apt-transport-https
+  apt:
+    name: apt-transport-https
+    state: latest
+    update_cache: true
+
+- name: Add Google key to apt
+  apt_key:
+    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    state: present
+
+- name: Restart server
+  become: yes
+  shell: sleep 2 && /sbin/shutdown -r now "Ansible system package upgraded"
+  async: 1
+  poll: 0
+  ignore_errors: true
+
+- name: waiting for server to come back
+  local_action: wait_for
+    host="{{ inventory_hostname }}"
+    port=22
+    delay=60
+    timeout=120

@@ -1,0 +1,42 @@
+---
+- name: Disable swap in linux
+  command: swapoff --all
+
+- name: Identify configured swap devices and files.
+  command: cat /proc/swaps
+  register: command_result
+
+- name: Ansible shell register result
+  debug: msg="{{ command_result.stdout }}"
+
+- name: Disable swap after reboot
+  command: sed -i '/ swap / s/^/#/' /etc/fstab
+
+- name: Ansible shell register result
+  debug: msg="{{ command_result.stdout }}"
+
+- name: "K8S Network Plugin Requirements"
+  copy:
+    src: "{{ role_path }}/files/k8s.conf"
+    dest: /etc/sysctl.d/k8s.conf
+
+- name: sudo sysctl --system
+  command: sysctl --system
+  register: command_result
+
+- name: Ansible shell register result
+  debug: msg="{{ command_result.stdout }}"
+
+- name: Restart server
+  become: yes
+  shell: sleep 2 && /sbin/shutdown -r now "Ansible system package upgraded"
+  async: 1
+  poll: 0
+  ignore_errors: true
+
+- name: waiting for server to come back
+  local_action: wait_for
+    host="{{ inventory_hostname }}"
+    port=22
+    delay=60
+    timeout=120
